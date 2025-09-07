@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Custom Sales Dashboard Layout</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet"/>
+    <style>
+        :root {
+            --bg-dark: #1d1e3a;
+            --bg-card: rgba(28,30,56,0.85);
+            --border-glass: 1.5px solid rgba(255, 255, 255, 0.07);
+            --text-light: #d1d4ed;
+            --text-muted: #a6abc9;
+            --accent-blue: #3bf1f3;
+            --accent-purple: #a56eff;
+            --font-main: 'Montserrat', Arial, sans-serif;
+            --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.6);
+        }
+        html, body {
+            margin: 0; padding: 0; height: 100%; width: 100%;
+            background: var(--bg-dark);
+            color: var(--text-light);
+            font-family: var(--font-main);
+            overflow-x: hidden;
+        }
+        .dashboard-root {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 230px;
+            background: #15172c;
+            padding: 32px 22px;
+            box-shadow: inset -1px 0 0 0 #2a2a4e;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-muted);
+            user-select: none;
+        }
+        .sidebar .logo {
+            font-size: 1.8rem;
+            color: var(--accent-purple);
+            font-weight: 900;
+            margin-bottom: 36px;
+            text-align:center;
+            letter-spacing: 2px;
+        }
+        /* Sidebar nav styles omitted for brevity—add as needed */
+
+
+        .dashboard-board {
+            flex: 1;
+            padding: 20px 28px 28px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+            overflow-y: auto;
+            user-select: none;
+        }
+        /* Top row: Summary + Filters */
+        .top-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr;
+            align-items: center;
+            gap: 24px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-glass);
+        }
+        .summary-card {
+            background: var(--bg-card);
+            border-radius: 18px;
+            padding: 22px 32px;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            flex-direction: column;
+            color: var(--text-light);
+            user-select: text;
+        }
+        .summary-card h2 {
+            font-size: 1.05rem;
+            margin: 0 0 9px 0;
+            font-weight: 600;
+            color: var(--accent-purple);
+        }
+        .summary-card .value {
+            font-size: 2.5rem;
+            font-weight: 900;
+            letter-spacing: 0.05em;
+            color: var(--accent-blue);
+        }
+        .summary-card .subvalue {
+            font-size: 1.1rem;
+            margin-top: 6px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .filters {
+            display: flex;
+            justify-content: flex-end;
+            align-items: baseline;
+            gap: 18px;
+            padding-left: 8px;
+        }
+        .filters label {
+            display: flex;
+            flex-direction: column;
+            font-weight: 600;
+            font-size: .9rem;
+            color: var(--text-muted);
+        }
+        .filters select, .filters input[type="date"] {
+            background: transparent;
+            border: 1.2px solid var(--border-glass);
+            color: var(--text-light);
+            border-radius: 7px;
+            padding: 6px 10px;
+            font-size: 0.85rem;
+            min-width: 100px;
+        }
+        .filters select:focus, .filters input[type="date"]:focus {
+            border-color: var(--accent-purple);
+            outline: none;
+            box-shadow: 0 0 10px var(--accent-purple);
+        }
+        .filters button {
+            padding: 8px 18px;
+            border-radius: 8px;
+            background: var(--accent-purple);
+            color: #fff;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.25s ease;
+            min-width: 90px;
+        }
+        .filters button:hover {
+            background: #9446ff;
+        }
+        /* Middle chart row: large sales trend + sales by region narrow side */
+        .middle-row {
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            gap: 24px;
+            min-height: 350px;
+        }
+        .card-large, .card-small {
+            background: var(--bg-card);
+            border-radius: 20px;
+            padding: 26px 28px 32px 28px;
+            box-shadow: var(--shadow-md);
+        }
+        .card-large h3, .card-small h3 {
+            font-size: 1.02rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            margin-bottom: 25px;
+            user-select: none;
+        }
+        .card-large canvas {
+            width: 100% !important;
+            height: 320px !important;
+        }
+        .card-small canvas {
+            width: 100% !important;
+            height: 320px !important;
+        }
+        /* Bottom row: three charts aligned horizontally*/
+        .bottom-row {
+            margin-top: 8px;
+            display: flex;
+            gap: 22px;
+            justify-content: space-between;
+        }
+        .card-bottom {
+            background: var(--bg-card);
+            border-radius: 20px;
+            box-shadow: var(--shadow-md);
+            flex: 1;
+            padding: 24px 24px 28px 24px;
+            user-select: none;
+        }
+        .card-bottom h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-purple);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .card-bottom canvas {
+            width: 100% !important;
+            height: 220px !important;
+        }
+        @media (max-width: 1024px) {
+            .dashboard-board {
+                padding: 20px 16px;
+            }
+            .top-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                justify-content: space-between;
+            }
+            .summary-card {
+                flex: 1 1 auto;
+                min-width: 140px;
+            }
+            .filters {
+                width: 100%;
+                justify-content: flex-start;
+                margin-top: 8px;
+            }
+            .middle-row {
+                grid-template-columns: 1fr;
+                grid-row-gap: 24px;
+            }
+            .bottom-row {
+                flex-direction: column;
+                gap: 18px;
+            }
+            .card-bottom {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-root">
+    <aside class="sidebar">
+        <div class="logo">Sales Dashboard</div>
+        <form class="filters" id="filterForm" onsubmit="applyFilters();return false;">
+            <label>
+                Region
+                <select id="region">
+                    <option value="">All</option>
+                    {% for r in regions %}<option value="{{r}}">{{r}}</option>{% endfor %}
+                </select>
+            </label>
+            <label>
+                Category
+                <select id="category">
+                    <option value="">All</option>
+                    {% for c in categories %}<option value="{{c}}">{{c}}</option>{% endfor %}
+                </select>
+            </label>
+            <label>
+                Product
+                <select id="product">
+                    <option value="">All</option>
+                    {% for p in products %}<option value="{{p}}">{{p}}</option>{% endfor %}
+                </select>
+            </label>
+            <label>
+                Date From
+                <input type="date" id="start_date" min="{{min_date}}" max="{{max_date}}" />
+            </label>
+            <label>
+                Date To
+                <input type="date" id="end_date" min="{{min_date}}" max="{{max_date}}" />
+            </label>
+            <button type="submit">Apply</button>
+            <button type="button" onclick="resetFilters()">Reset</button>
+        </form>
+    </aside>
+    <main class="dashboard-board">
+        <div class="top-row">
+            <section class="summary-card">
+                <h2>Total Sales</h2>
+                <div class="value" id="total_sales">--</div>
+            </section>
+            <section class="summary-card">
+                <h2>Top Product</h2>
+                <div class="value" id="top_product">--</div>
+                <div class="subvalue" id="top_product_sales"></div>
+            </section>
+            <section class="filters"></section>
+        </div>
+        <div class="middle-row">
+            <section class="card-large">
+                <h3>Sales Trend</h3>
+                <canvas id="trendChart"></canvas>
+            </section>
+            <section class="card-small">
+                <h3>Sales by Region</h3>
+                <canvas id="regionChart"></canvas>
+            </section>
+        </div>
+        <div class="bottom-row">
+            <section class="card-bottom">
+                <h3>Category Breakdown</h3>
+                <canvas id="categoryChart"></canvas>
+            </section>
+            <section class="card-bottom">
+                <h3>Sales by Payment Method</h3>
+                <canvas id="paymentChart"></canvas>
+            </section>
+            <section class="card-bottom">
+                <h3>Top 5 Products</h3>
+                <canvas id="productChart"></canvas>
+            </section>
+        </div>
+    </main>
+</div>
+<script>
+const socket = io();
+let trendChart, regionChart, categoryChart, paymentChart, productChart;
+
+function updateChart(chart, labels, data) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
+    chart.update();
+}
+
+socket.on('update', function(data) {
+    document.getElementById('total_sales').textContent = data.total_sales;
+    document.getElementById('top_product').textContent = data.top_product;
+    document.getElementById('top_product_sales').textContent = data.top_product ? ("$" + data.top_product_sales) : "";
+    const trendLabels = Object.keys(data.sales_trend);
+    const trendData = Object.values(data.sales_trend);
+    const categoryLabels = Object.keys(data.category_breakdown);
+    const categoryData = Object.values(data.category_breakdown);
+    const regionLabels = Object.keys(data.sales_by_region);
+    const regionData = Object.values(data.sales_by_region);
+    const paymentLabels = Object.keys(data.sales_by_payment);
+    const paymentData = Object.values(data.sales_by_payment);
+    const productLabels = data.top_products.map(x => x.product);
+    const productData = data.top_products.map(x => x.sales);
+    
+    if (!trendChart) {
+        trendChart = new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: trendLabels, datasets: [{ label: 'Sales Trend', data: trendData, borderColor: '#3bf1f3', fill: true, backgroundColor: 'rgba(59,241,243,0.2)', tension: 0.4 }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#33475b' } }, x: { grid: { color: '#33475b' } } } }
+        });
+    } else updateChart(trendChart, trendLabels, trendData);
+
+    if (!regionChart) {
+        regionChart = new Chart(document.getElementById('regionChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: regionLabels, datasets: [{ label: 'Sales by Region', data: regionData, backgroundColor: '#3bf1f3', borderRadius: 10 }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#33475b' } }, x: { grid: { color: '#33475b' } } } }
+        });
+    } else updateChart(regionChart, regionLabels, regionData);
+
+    if (!categoryChart) {
+        categoryChart = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: categoryLabels, datasets: [{ label: 'Category Breakdown', data: categoryData, backgroundColor: ['#3bf1f3', '#5546f1', '#fc6a6a', '#6dffe3', '#a65df4', '#afb6dc'] }] },
+            options: { plugins: { legend: { position: 'bottom', labels: { color: '#a6bce5' } } } }
+        });
+    } else updateChart(categoryChart, categoryLabels, categoryData);
+
+    if (!paymentChart) {
+        paymentChart = new Chart(document.getElementById('paymentChart').getContext('2d'), {
+            type: 'pie',
+            data: { labels: paymentLabels, datasets: [{ label: 'Sales by Payment', data: paymentData, backgroundColor: ['#fc6a6a', '#3bf1f3', '#fc6a6a', '#0c95c6'] }] },
+            options: { plugins: { legend: { position: 'bottom', labels: { color: '#a6bce5' } } } }
+        });
+    } else updateChart(paymentChart, paymentLabels, paymentData);
+
+    if (!productChart) {
+        productChart = new Chart(document.getElementById('productChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: productLabels, datasets: [{ label: 'Top 5 Products', data: productData, backgroundColor: '#a65df4' }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, grid: { color: '#33475b' } }, y: { grid: { color: '#33475b' } } } }
+        });
+    } else updateChart(productChart, productLabels, productData);
+});
+
+function applyFilters() {
+    const filters = {
+        region: document.getElementById('region').value || null,
+        category: document.getElementById('category').value || null,
+        product: document.getElementById('product').value || null,
+        start_date: document.getElementById('start_date').value || null,
+        end_date: document.getElementById('end_date').value || null,
+    };
+    socket.emit('filter', filters);
+}
+
+function resetFilters() {
+    document.getElementById('region').value = '';
+    document.getElementById('category').value = '';
+    document.getElementById('product').value = '';
+    document.getElementById('start_date').value = '';
+    document.getElementById('end_date').value = '';
+    socket.emit('filter', {});
+}
+</script>
+</body>
+</html>
